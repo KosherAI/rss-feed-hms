@@ -11,12 +11,61 @@ from datetime import datetime
 import html
 import re
 
-def clean_html(text):
-    """Remove HTML tags from text"""
+def clean_html_for_rss(html_content):
+    """
+    Clean HTML content while preserving important formatting.
+    Removes excessive nested spans and inline styles, keeps semantic tags.
+    """
+    if not html_content:
+        return ""
+    
+    # First, unescape any HTML entities
+    content = html.unescape(html_content)
+    
+    # Remove dir="ltr" and dir="rtl" attributes
+    content = re.sub(r'\s+dir="[^"]*"', '', content)
+    
+    # Remove style attributes (inline CSS)
+    content = re.sub(r'\s+style="[^"]*"', '', content)
+    
+    # Remove excessive nested spans - replace <span><span>...</span></span> with just the content
+    # This handles the common pattern of multiple nested spans
+    while re.search(r'<span[^>]*>\s*<span', content):
+        content = re.sub(r'<span[^>]*>(\s*<span)', r'\1', content)
+        content = re.sub(r'</span>(\s*</span>)', r'\1', content)
+    
+    # Remove remaining empty spans
+    content = re.sub(r'<span[^>]*>\s*</span>', '', content)
+    
+    # Remove spans that only wrap text (convert <span>text</span> to just text)
+    # But keep spans that contain other tags
+    content = re.sub(r'<span[^>]*>([^<]+)</span>', r'\1', content)
+    
+    # Clean up multiple consecutive spaces
+    content = re.sub(r'\s+', ' ', content)
+    
+    # Clean up spaces around tags
+    content = re.sub(r'>\s+<', '><', content)
+    
+    # Ensure proper paragraph spacing
+    content = re.sub(r'</p>\s*<p', '</p>\n<p', content)
+    
+    # Convert <b> to <strong> and <i> to <em> for semantic HTML
+    content = re.sub(r'<b(\s|>)', r'<strong\1', content)
+    content = re.sub(r'</b>', r'</strong>', content)
+    content = re.sub(r'<i(\s|>)', r'<em\1', content)
+    content = re.sub(r'</i>', r'</em>', content)
+    
+    return content.strip()
+
+def clean_html_to_text(text):
+    """Remove ALL HTML tags from text for description field"""
     if not text:
         return ""
     clean = re.sub('<.*?>', '', text)
     clean = html.unescape(clean)
+    # Clean up multiple spaces and newlines
+    clean = re.sub(r'\s+', ' ', clean)
     return clean.strip()
 
 def fetch_all_stories(results_per_page=50):
@@ -41,13 +90,13 @@ def fetch_all_stories(results_per_page=50):
             stories = data.get('data', [])
             if not stories:
                 break
-                
+            
             all_stories.extend(stories)
             
             meta = data.get('meta', {})
             if page >= meta.get('total_pages', 1):
                 break
-                
+            
             page += 1
             
         except Exception as e:
@@ -86,17 +135,20 @@ def create_rss_feed(stories, output_file='feed.xml'):
             story_id = story.get('id', '')
             ET.SubElement(item, 'guid', isPermaLink='false').text = str(story_id)
         
+        # Description: plain text only (for RSS readers that don't support HTML)
         description = story.get('description') or story.get('content', '')
         if description:
-            clean_desc = clean_html(description)
+            clean_desc = clean_html_to_text(description)
             if len(clean_desc) > 300:
                 clean_desc = clean_desc[:297] + '...'
             ET.SubElement(item, 'description').text = clean_desc
         
+        # Content: cleaned HTML with proper formatting preserved
         content = story.get('content', '')
         if content:
+            cleaned_content = clean_html_for_rss(content)
             content_elem = ET.SubElement(item, 'content:encoded')
-            content_elem.text = content
+            content_elem.text = cleaned_content
         
         image = story.get('image') or story.get('thumbnail')
         if image:
@@ -118,9 +170,6 @@ def create_rss_feed(stories, output_file='feed.xml'):
     print(f"RSS feed generated: {output_file}")
     print(f"Total items in feed: {len(stories)}")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     stories = fetch_all_stories()
-    if stories:
-        create_rss_feed(stories)
-    else:
-        print("No stories found!")
+    create_rss_feed(stories)
