@@ -1,0 +1,55 @@
+name: Update HMS RSS Feed
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-feed:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+        
+    - name: Install dependencies
+      run: pip install requests
+      
+    - name: Generate RSS feed
+      run: python generate_rss.py
+      
+    - name: Commit and push if changed
+      run: |
+        git config --global user.name 'GitHub Actions Bot'
+        git config --global user.email 'actions@github.com'
+        git add feed.xml
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Update RSS feed - $(date)" && git push)
+```
+
+5. Click **"Commit new file"**
+
+### Step 3: Run the Workflow
+1. Click the **"Actions"** tab
+2. On the left, you should now see **"Update HMS RSS Feed"**
+3. Click on it
+4. Click **"Run workflow"** (on the right)
+5. Click the green **"Run workflow"** button
+
+Wait about 30 seconds and you should see a green checkmark.
+
+### Step 4: Check for feed.xml
+1. Go back to the **"Code"** tab
+2. You should now see `feed.xml` in your file list!
+
+Then your RSS feed will be at:
+```
+https://kosherai.github.io/rss-feed-hms/feed.xml
