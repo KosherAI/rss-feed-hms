@@ -56,15 +56,33 @@ def clean_html_for_rss(html_content):
         for attr in attrs_to_remove:
             del tag[attr]
 
-    # Remove empty tags (except <br> and <hr>)
+    # Remove empty/whitespace-only tags (except <br> and <hr>)
+    # If a tag contains only whitespace or non-breaking spaces, replace
+    # it with a plain space to avoid merging adjacent words.
+    # Example: 'audience<em>\xa0</em>before' -> 'audience before'
     for tag in soup.find_all(True):
-        if tag.name not in ('br', 'hr') and not tag.get_text(strip=True) and not tag.find_all(True):
-            tag.decompose()
+        if tag.name not in ('br', 'hr') and not tag.find_all(True):
+            inner_text = tag.get_text()
+            # Check if the tag has only whitespace/nbsp (no real content)
+            has_only_whitespace = not inner_text.replace('\u00a0', '').strip()
+            if has_only_whitespace:
+                if inner_text:
+                    # Had whitespace/nbsp content - replace with a space
+                    tag.replace_with(' ')
+                else:
+                    # Truly empty tag - remove it
+                    tag.decompose()
 
     # Get the cleaned HTML string
     cleaned = str(soup)
 
-    # Clean up whitespace
+    # Normalize non-breaking spaces to regular spaces
+    cleaned = cleaned.replace('\u00a0', ' ')
+
+    # Clean up multiple spaces (but not inside tags)
+    cleaned = re.sub(r' {2,}', ' ', cleaned)
+
+    # Clean up whitespace between tags
     cleaned = re.sub(r'\n\s*\n', '\n', cleaned)
     cleaned = cleaned.strip()
 
